@@ -134,6 +134,10 @@ def read_source(filename):
 
 # Main translation function
 def translate(functions):
+  
+  print("")
+  print("")
+
   for function in functions:
     # Print function name
     print(function["functionName"] + ": ")
@@ -142,18 +146,58 @@ def translate(functions):
     scope = {}
 
     # Add parameters to scope
-    for parameter in function["parameters"]:
-      scope[ parameter["dataName"] ] = parameter["address"]
+    for parameter in function["parameter"]:
+      scope[parameter["dataName"]] = parameter["address"]
 
     # translate instructions
     for instruction in function["instruction"]:
+      if "return" in instruction:
+        value = instruction.split(" ")[1].strip(";")
+        if value in scope:
+          print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
+        else:
+          print("\tmov\teax, " + str(value))
+        print("\tpop rbp")
+        print("\tret")
+        break
       if instruction["codeType"] == "declaration":
+        #print(instruction)
         # add declaration to the scope
         scope[ instruction[ "dataName" ] ] = instruction["address"] 
+        #print(scope)
+        # if declaration instantly assigns value, translate immediately
+        if instruction["dataValue"] != "":
+          print("\tmov\tDWORD PTR [rbp" + instruction["address"].strip(' ') + "], " + instruction["dataValue"] )
+            
       if instruction["codeType"] == "logicOperation":
-      
+        operator = ""
+        if instruction["operator"] == "+":
+          operator = "add"
+           
+        if instruction["operator"] == "-":
+          operator = "sub"
+
+        if operator == "":
+          if "(" or ")" in instruction["operand1"]:
+            operator = "call"
+          else:
+            operator = "mov"
+
+        if operator == "add" or operator == "sub":
+          if instruction["operand2"].strip(' ') in scope:
+            # mov eax, mem[operand2]
+            # op mem[dest], eax
+            print("\tmov\teax, DWORD PTR[rbp"+ str(scope[instruction["operand2"].strip(" ")]) + "]")
+            print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], eax" )
+          else:
+            # op mem[dest], num
+            print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand2"].strip(" "))
+     
+        if operator == "mov":
+          print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand1"] )
+ 
       if instruction["codeType"] == "for":
-      
+        print("\tnot processed")
 
 
 
@@ -217,7 +261,7 @@ def main():
         "type": head[i],
         "dataName": head[i+1],
         "codeType": "declaration",
-        "addresss": -(declaration*4)
+        "address": -(declaration*4)
       }
       declaration = declaration + 1
       function["parameter"].append(param)
