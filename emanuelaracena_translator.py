@@ -1,9 +1,9 @@
-## CSCI 360 - Project 1
-## Author: Emanuel Aracena
-## Created on September 28, 2019
+# CSCI 360 - Project 1
+# Author: Emanuel Aracena
+# Created on September 28, 2019
 
-## 
-## Using code from file 'project_source_code_analyzer.py' given by Professor Xiaojie Zhang
+##
+# Using code from file 'project_source_code_analyzer.py' given by Professor Xiaojie Zhang
 ##
 
 import sys
@@ -13,14 +13,19 @@ import json
 # Global declaration count to keep track of all declarations across functions
 declaration = 1
 
+# Keep track of labels made to presever unique names
+label_count = 0
+
 # int total(int num)
+
+
 def read_head(line):
     words = [""]
     i = 0
     for char in line:
         if char != ' ' and char != '(' and char != ')' and char != ',':
             words[i] = words[i] + str(char)
-            #print(words)
+            # print(words)
         else:
             words = words + [""]
             i = i + 1
@@ -45,7 +50,7 @@ def read_declaration(line):
         "dataType": words[0],
         "dataName": words[1],
         "dataValue": words[2],
-        "address": -(declaration*4)
+        "address": -(declaration * 4)
     }
 
     return obj
@@ -53,7 +58,7 @@ def read_declaration(line):
 
 # sum=sum+num;
 def read_logic(line):
-    words = ["", "", "",""]
+    words = ["", "", "", ""]
     i = 0
     for char in line:
         if char == '+' or char == '-' or char == '/':
@@ -77,6 +82,7 @@ def read_logic(line):
 # read instructions recursively
 def read_instruction(i, segment):
     instruction = []
+    #print(segment)
     while i < len(segment):
         line = segment[i]
         if line == "}":
@@ -88,15 +94,53 @@ def read_instruction(i, segment):
             result = read_for_loop(i, segment)
             instruction.append(result["for"])
             i = result["i"]
+        elif line.startswith("if"):
+            result = read_if(i, segment)
+            instruction.append(result["if"])
+            i = result["i"]
+        elif line.startswith("else"):
+            result = read_else(i, segment)
+            instruction.append(result["else"])
+            i = result["i"]
         elif line.startswith("return"):
             instruction.append(line)
             i = i + 1
         else:
             instruction.append(read_logic(line))
             i = i + 1
-    return {"i": i+1, "statement": instruction}
+    return {"i": i + 1, "statement": instruction}
+
+# if(num>10) {
+# else {
+def read_if(i, segment):
+    line = segment[i]
+    header = line[3:-2]
+
+    obj = {
+       "codeType": "if",
+       "conditional": header,
+       "statement": [],
+    }
+    i = i + 1
+    result = read_instruction(i, segment)
+    obj["statement"] = result["statement"]
+    return {"i": result["i"], "if": obj}
 
 
+# else
+def read_else(i, segment):
+    line = segment[i]
+    obj = {
+      "codeType": "else",
+      "statement": []
+    }
+    i = i + 1
+    result = read_instruction(i, segment)
+    obj["statement"] = result["statement"]
+
+    return {"i": result["i"], "else": result["statement"]}
+
+   
 # for(int i=0;i<num;i=i+1)
 def read_for_loop(i, segment):
     line = segment[i]
@@ -128,110 +172,235 @@ def read_source(filename):
   # remove all empty items
   source = [x for x in source if x != '']  
 
-  #print(source)
+  # print(source)
   return source
 
 
 # Main translation function
 def translate(functions):
   
-  print("")
-  print("")
+    print("")
+    print("")
 
-  for function in functions:
-    # Print function name
-    print(function["functionName"] + ": ")
+    for function in functions:
+        # Print function name
+        print(function["functionName"] + ": ")
 
-    # Create scope hash table to keep track of all declared variables/parameters
-    scope = {}
-
-    # Add parameters to scope
-    for parameter in function["parameter"]:
-      scope[parameter["dataName"]] =   "+" + str(-1*parameter["address"])
-
-    # translate instructions
-    for instruction in function["instruction"]:
-      if "return" in instruction:
-        value = instruction.split(" ")[1].strip(";")
-        if value in scope:
-          print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
-        else:
-          print("\tmov\teax, " + str(value))
-        print("\tpop rbp")
-        print("\tret")
-        break
-      if instruction["codeType"] == "declaration":
-        #print(instruction)
-        # add declaration to the scope
-        scope[ instruction[ "dataName" ] ] = instruction["address"] 
-        #print(scope)
-        # if declaration instantly assigns value, translate immediately
-        if instruction["dataValue"] != "":
-          print("\tmov\tDWORD PTR [rbp" + instruction["address"].strip(' ') + "], " + instruction["dataValue"] )
-            
-      if instruction["codeType"] == "logicOperation":
+        # Create scope hash table to keep track of all declared variables/parameters
+        scope ={}
+    
+        # Add parameters to scope
+        for parameter in function["parameter"]:
+            scope[parameter["dataName"]] =   "+" + str(-1*parameter["address"])
         
-        # Set the assembly operator
-        operator = ""
-        if instruction["operator"] == "+":
-          operator = "add"
-           
-        if instruction["operator"] == "-":
-          operator = "sub"
+        #print(function["instruction"])
+        # translate instructions
+        for instruction in function["instruction"]:
+            #print(function["instruction"])
+            if "return" in instruction:
+                value = instruction.split(" ")[1].strip(";")
+                if value in scope:
+                    print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
+                else:
+                    print("\tmov\teax, " + str(value))
+                    print("\tpop rbp")
+                    print("\tret")
+                break
+    
+    
+            if instruction["codeType"] == "declaration":
+                 scope = translate_declaration(instruction, scope)
+     
+            if instruction["codeType"] == "logicOperation":
+                 translate_logic(instruction, scope) 
+                  
+            if instruction["codeType"] == "for":
+                 translate_for(instruction, scope)
+                
+            if instruction["codeType"] == "if":
+                 translate_if(instruction, scope)
+    
+    
 
-        if instruction["operator"] == "":
-          if "(" in instruction["operand1"]:
-            operator = "call"
-          else:
-            operator = "mov"
+def translate_declaration(instruction, scope):
+    # print(instruction)
+    
+    # add declaration to the scope
+    scope[ instruction[ "dataName" ] ] = instruction["address"] 
+    # print(scope)
+    
+    # if declaration instantly assigns value, translate immediately
+    if instruction["dataValue"] != "":
+        print("\tmov\tDWORD PTR [rbp" + instruction["address"].strip(' ') + "], " + instruction["dataValue"] )
 
-        # Print the assembly instruction 
-        if operator == "add" or operator == "sub":
-          if instruction["operand2"].strip(' ') in scope:
+    return scope
+
+
+def translate_logic(instruction, scope):
+    # Set the assembly operator
+    operator = ""
+    # print(instruction)
+    if instruction["operator"] == "+":
+        operator = "add"
+        
+    if instruction["operator"] == "-":
+        operator = "sub"
+  
+    if instruction["operator"] == "":
+      if "(" in instruction["operand1"]:
+          operator = "call"
+      else:
+          operator = "mov"
+  
+    # Print the assembly instruction 
+    if operator == "add" or operator == "sub":
+        if instruction["operand2"].strip(' ') in scope:
             # mov eax, mem[operand2]
             # op mem[dest], eax
             print("\tmov\teax, DWORD PTR[rbp"+ str(scope[instruction["operand2"].strip(" ")]) + "]")
             print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], eax" )
-          else:
+        else:
             # op mem[dest], num
             print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand2"].strip(" "))
-     
-        if operator == "mov":
-          print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand1"] )
-        
-        if operator == "call":
-          # count number of arguments
-          function_call = instruction["operand1"].strip(" ")
+              
+    if operator == "mov":
+        print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand1"] )
+              
+    if operator == "call":
+        translate_call(instruction, scope)          
+              
 
-          # Split into substrings, until arguments seperated by commas remain,
-          # then find the length of the list when split by commas
-          # for example: f1(a, b, c) turns into a| b | c which has length 3
-          num_of_args = len(function_call.split("(")[1].strip(")").split())
-          arguments = function_call.split("(")[1].strip(")").split()
 
-          # Theres only six registers for argument calling:
-          # rdi, rsi, rdx, rcx, r8, r9
-          # the rest are pushed to stack
-          registers = ["rsi", "rdx", "rcx", "r8", "r9"]
 
-          num_of_args = num_of_args - 1
-          while num_of_args >= 0:
-            if num_of_args > 4:
-              # Push onto stack
-              print("\tmov\tedi, DWORD PTR[rbp" + scope[arguments[num_of_args].strip(" ")] + "]") 
-              print("\tpush\trdi")
+def translate_call(instruction, scope):
+    # count number of arguments
+    function_call = instruction["operand1"].strip(" ")
+  
+    # Split into substrings, until arguments seperated by commas remain,
+    # then find the length of the list when split by commas
+    # for example: f1(a, b, c) turns into a| b | c which has length 3
+    num_of_args = len(function_call.split("(")[1].strip(")").split())
+    arguments = function_call.split("(")[1].strip(")").split()
+  
+    # Theres only six registers for argument calling:
+    # rdi, rsi, rdx, rcx, r8, r9
+    # the rest are pushed to stack
+    registers = ["rsi", "rdx", "rcx", "r8", "r9"]
+  
+    num_of_args = num_of_args - 1
+    while num_of_args >= 0:
+        if num_of_args > 4:
+            # Push onto stack
+            print("\tmov\tedi, DWORD PTR[rbp" + scope[arguments[num_of_args].strip(" ")] + "]") 
+            print("\tpush\trdi")
+        else:
+            # Use registers
+            print("\tmov\t"+ registers[num_of_args] + ", DWORD PTR[rbp" + str(scope[ arguments[num_of_args].strip(" ").strip(",")]) + "]")
+                
+        num_of_args = num_of_args - 1
+         
+    # make the call
+    print("\tmov \trdi, eax")
+    print("\tcall " + function_call)
+
+
+def translate_if(instruction, scope):
+    global label_count
+    jump_cmd = ""
+    delimiter = ""
+    # check the conditional
+    if "==" in instruction["conditional"]:
+        jump_cmd = "jne"
+        delimiter = "=="
+  
+    if "<=" in instruction["conditional"]:
+        jump_cmd = "jg"
+        delimiter = "<="
+  
+    if ">=" in instruction["conditional"]:
+        jump_cmd = "jl"
+        delimiter = ">="
+  
+    if "<>" in instruction["conditional"]:
+        jump_cmd = "je"
+        delimiter = "<>"
+  
+    if "<" in instruction["conditional"]:
+        jump_cmd = "jge"
+        delimiter = "<"
+  
+    if ">" in instruction["conditional"]:
+        jump_cmd = "jle"
+        delimiter = ">"
+  
+    # Do the initial compare
+    arguments = instruction["conditional"].strip("(").strip(")").split(delimiter)
+    print("\tmov\teax, DWORD PTR[rbp" + str(scope[ arguments[0] ]) + "]")
+    print("\tcmp\teax, DWORD PTR[rbp" + str(scope[arguments[1]]) + "]")
+    print("\t" + jump_cmd + "\t.L" + str(label_count))
+    
+    # translate the instructions in the if statement
+
+    for statement in instruction["statement"]:
+        if "return" in statement:
+            value = statement.split(" ")[1].strip(";")
+            if value in scope:
+                print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
             else:
-              # Use registers
-              print("\tmov\t"+ registers[num_of_args] + ", DWORD PTR[rbp" + str(scope[ arguments[num_of_args].strip(" ").strip(",")]) + "]")
+                print("\tmov\teax, " + str(value))
+                print("\tpop rbp")
+                print("\tret")
+            break
+    
+    
+        if statement["codeType"] == "declaration":
+             scope = translate_declaration(statement, scope)
+    
+        if statement["codeType"] == "logicOperation":
+             translate_logic(statement, scope) 
+              
+        if statement["codeType"] == "for":
+             translate_for(statement, scope)
             
-            num_of_args = num_of_args - 1
-          # make the call
-          print("\tmov \trdi, eax")
-          print("\tcall " + function_call)
-          
-      if instruction["codeType"] == "for":
-        print("\tnot processed")
+        if statement["codeType"] == "if":
+             translate_if(statement, scope)
 
+    # Print the unconditional jump
+    print("\tjmp\t.L" + str(label_count+1))
+    # Check if there is an else statement, and translate
+    # the slice method prevents "else {" from getting treated like a logic operation
+    # print(instruction["else"])
+    print(".L" + str(label_count)+ ": ")
+    if instruction["else"] != []:
+        for statement in instruction["else"]:
+            if "return" in statement:
+                value = statement.split(" ")[1].strip(";")
+                if value in scope:
+                    print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
+                else:
+                    print("\tmov\teax, " + str(value))
+                    print("\tpop rbp")
+                    print("\tret")
+                break
+        
+            if statement["codeType"] == "declaration":
+                 scope = translate_declaration(statement, scope)
+        
+            if statement["codeType"] == "logicOperation":
+                 translate_logic(statement, scope) 
+                  
+            if statement["codeType"] == "for":
+                 translate_for(statement, scope)
+                
+            if statement["codeType"] == "if":
+                 translate_if(statement, scope)
+    
+    print(".L" + str(label_count+1) + ":")
+    label_count = label_count + 2
+          
+
+def translate_for(instruction, scope):
+    print("not processed")
 
 
 
@@ -247,7 +416,7 @@ def main():
   inside_function = False
   function = []
   for line in source:
-    #print(line," :\t\t", function, inside_function, ":\t\t", parenthesis_stack)
+    # print(line," :\t\t", function, inside_function, ":\t\t", parenthesis_stack)
     if "{" in line and inside_function:
       parenthesis_stack = parenthesis_stack + 1;
       function.append(line)
@@ -268,7 +437,7 @@ def main():
     elif inside_function:
       function.append(line)
 
-  #print(unparsed_functions)
+  # print(unparsed_functions)
 
   function_list = []
   for unparsed_function in unparsed_functions:
@@ -306,9 +475,9 @@ def main():
     declaration = 1
 
   # Print the parsed JSON format of all the functions
-  for function in function_list:
-    result = json.dumps(function, indent=4)
-    print(result)
+  #for function in function_list:
+    #result = json.dumps(function, indent=4)
+    #print(result)
 
   # Translate the parsed functions into assembly
   translate(function_list)
