@@ -138,7 +138,7 @@ def read_else(i, segment):
     result = read_instruction(i, segment)
     obj["statement"] = result["statement"]
 
-    return {"i": result["i"], "else": result["statement"]}
+    return {"i": result["i"], "else": obj}
 
    
 # for(int i=0;i<num;i=i+1)
@@ -196,31 +196,34 @@ def translate(functions):
         #print(function["instruction"])
         # translate instructions
         for instruction in function["instruction"]:
-            #print(function["instruction"])
+            #print(instruction)
             if "return" in instruction:
                 value = instruction.split(" ")[1].strip(";")
                 if value in scope:
                     print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
+                    print("\tpop rbp")
+                    print("\tret")
                 else:
                     print("\tmov\teax, " + str(value))
                     print("\tpop rbp")
                     print("\tret")
+                print("")
                 break
     
-    
             if instruction["codeType"] == "declaration":
-                 scope = translate_declaration(instruction, scope)
+                scope = translate_declaration(instruction, scope)
      
             if instruction["codeType"] == "logicOperation":
-                 translate_logic(instruction, scope) 
+                translate_logic(instruction, scope) 
                   
             if instruction["codeType"] == "for":
-                 translate_for(instruction, scope)
+                translate_for(instruction, scope)
                 
             if instruction["codeType"] == "if":
-                 translate_if(instruction, scope)
+                translate_if(instruction, scope)
     
-    
+            if instruction["codeType"] == "else":
+                translate_else(instruction, scope) 
 
 def translate_declaration(instruction, scope):
     # print(instruction)
@@ -354,16 +357,19 @@ def translate_if(instruction, scope):
     
     
         if statement["codeType"] == "declaration":
-             scope = translate_declaration(statement, scope)
+            scope = translate_declaration(statement, scope)
     
         if statement["codeType"] == "logicOperation":
-             translate_logic(statement, scope) 
+            translate_logic(statement, scope) 
               
         if statement["codeType"] == "for":
-             translate_for(statement, scope)
+            translate_for(statement, scope)
             
         if statement["codeType"] == "if":
-             translate_if(statement, scope)
+            translate_if(statement, scope)
+
+        if statement["codeType"] == "else":
+            translate_else(statement, scope)
 
     # Print the unconditional jump
     print("\tjmp\t.L" + str(label_count+1))
@@ -371,33 +377,47 @@ def translate_if(instruction, scope):
     # the slice method prevents "else {" from getting treated like a logic operation
     # print(instruction["else"])
     print(".L" + str(label_count)+ ": ")
-    if instruction["else"] != []:
-        for statement in instruction["else"]:
-            if "return" in statement:
-                value = statement.split(" ")[1].strip(";")
-                if value in scope:
-                    print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
-                else:
-                    print("\tmov\teax, " + str(value))
-                    print("\tpop rbp")
-                    print("\tret")
-                break
-        
-            if statement["codeType"] == "declaration":
-                 scope = translate_declaration(statement, scope)
-        
-            if statement["codeType"] == "logicOperation":
-                 translate_logic(statement, scope) 
-                  
-            if statement["codeType"] == "for":
-                 translate_for(statement, scope)
-                
-            if statement["codeType"] == "if":
-                 translate_if(statement, scope)
-    
-    print(".L" + str(label_count+1) + ":")
-    label_count = label_count + 2
+    label_count = label_count + 1
           
+  
+def translate_else(instruction, scope):
+    global label_count
+    for statement in instruction["statement"]:
+        if "return" in statement:
+            value = statement.split(" ")[1].strip(";")
+            if value in scope:
+                print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
+            else:
+                print("\tmov\teax, " + str(value))
+                print("\tpop rbp")
+                print("\tret")
+            break
+    
+    
+        if statement["codeType"] == "declaration":
+            scope = translate_declaration(statement, scope)
+    
+        if statement["codeType"] == "logicOperation":
+            translate_logic(statement, scope) 
+              
+        if statement["codeType"] == "for":
+            translate_for(statement, scope)
+            
+        if statement["codeType"] == "if":
+            translate_if(statement, scope)
+
+        if statement["codeType"] == "else":
+            translate_else(statement, scope)
+
+    # Print the unconditional jump
+    #print("\tjmp\t.L" + str(label_count+1))
+    # Check if there is an else statement, and translate
+    # the slice method prevents "else {" from getting treated like a logic operation
+    # print(instruction["else"])
+    print(".L" + str(label_count)+ ":")
+    label_count = label_count + 1
+
+
 
 def translate_for(instruction, scope):
     print("not processed")
