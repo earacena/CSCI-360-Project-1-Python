@@ -147,7 +147,7 @@ def translate(functions):
 
     # Add parameters to scope
     for parameter in function["parameter"]:
-      scope[parameter["dataName"]] = parameter["address"]
+      scope[parameter["dataName"]] =   "+" + str(-1*parameter["address"])
 
     # translate instructions
     for instruction in function["instruction"]:
@@ -170,6 +170,8 @@ def translate(functions):
           print("\tmov\tDWORD PTR [rbp" + instruction["address"].strip(' ') + "], " + instruction["dataValue"] )
             
       if instruction["codeType"] == "logicOperation":
+        
+        # Set the assembly operator
         operator = ""
         if instruction["operator"] == "+":
           operator = "add"
@@ -177,12 +179,13 @@ def translate(functions):
         if instruction["operator"] == "-":
           operator = "sub"
 
-        if operator == "":
-          if "(" or ")" in instruction["operand1"]:
+        if instruction["operator"] == "":
+          if "(" in instruction["operand1"]:
             operator = "call"
           else:
             operator = "mov"
 
+        # Print the assembly instruction 
         if operator == "add" or operator == "sub":
           if instruction["operand2"].strip(' ') in scope:
             # mov eax, mem[operand2]
@@ -195,7 +198,37 @@ def translate(functions):
      
         if operator == "mov":
           print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand1"] )
- 
+        
+        if operator == "call":
+          # count number of arguments
+          function_call = instruction["operand1"].strip(" ")
+
+          # Split into substrings, until arguments seperated by commas remain,
+          # then find the length of the list when split by commas
+          # for example: f1(a, b, c) turns into a| b | c which has length 3
+          num_of_args = len(function_call.split("(")[1].strip(")").split())
+          arguments = function_call.split("(")[1].strip(")").split()
+
+          # Theres only six registers for argument calling:
+          # rdi, rsi, rdx, rcx, r8, r9
+          # the rest are pushed to stack
+          registers = ["rsi", "rdx", "rcx", "r8", "r9"]
+
+          num_of_args = num_of_args - 1
+          while num_of_args >= 0:
+            if num_of_args > 4:
+              # Push onto stack
+              print("\tmov\tedi, DWORD PTR[rbp" + scope[arguments[num_of_args].strip(" ")] + "]") 
+              print("\tpush\trdi")
+            else:
+              # Use registers
+              print("\tmov\t"+ registers[num_of_args] + ", DWORD PTR[rbp" + str(scope[ arguments[num_of_args].strip(" ").strip(",")]) + "]")
+            
+            num_of_args = num_of_args - 1
+          # make the call
+          print("\tmov \trdi, eax")
+          print("\tcall " + function_call)
+          
       if instruction["codeType"] == "for":
         print("\tnot processed")
 
