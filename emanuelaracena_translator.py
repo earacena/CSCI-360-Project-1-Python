@@ -183,6 +183,8 @@ def translate(functions):
     print("")
 
     for function in functions:
+        # print seperator
+        print("___________________________________________________")
         # Print function name
         print(function["functionName"] + ": ")
         
@@ -518,84 +520,149 @@ def translate_for(instruction, scope):
     print(".L" + str(label_count) + ":")
     label_count = label_count + 2
 
+
+# Splash screen
+def splash_screen():
+    print(" _____________________________________________________________")
+    print("|            CSCI Project 1 - x86_64 Assembly (Python)        |")
+    print("|                   by Emanuel Aracena (solo)                 |")    
+    print("|_____________________________________________________________|")
     
+
+# print menu of choices
+def print_choices():
+    print("\t1. Load source file, and print JSON")
+    print("\t2. Load source file, and print Assembly")
+    print("\t3. Load source file, and print both JSON and Assembly")
+    print("\t0. Quit")
+    print("")
+
+
+# Load file and just print JSON
+def choice_1():
+    filename = ""
+    filename = input("Filename of source code (C++ only): ")
+    function_list = ""
+    function_list = parse_source(filename)
+    print_JSON(function_list) 
+
+# Load file and just print Assembly
+def choice_2():
+    filename = ""
+    filename = input("Filename of source code (C++ only): ")
+    function_list = ""
+    function_list = parse_source(filename)
+    translate(function_list)
+
+# Load file and print JSON and Assembly
+def choice_3():
+    filename = ""
+    filename = input("Filename of source code (C++ only): ")
+    function_list = ""
+    function_list = parse_source(filename)
+    print_JSON(function_list)
+    translate(function_list)
+
+
+# parse source code into function list
+def parse_source(filename):
+    
+    source = read_source(filename)
+   
+    # Seperate source code into functions
+    unparsed_functions = []
+    parenthesis_stack = 0
+    inside_function = False
+    function = []
+    for line in source:
+        # print(line," :\t\t", function, inside_function, ":\t\t", parenthesis_stack)
+        if "{" in line and inside_function:
+            parenthesis_stack = parenthesis_stack + 1;
+            function.append(line)
+          
+        elif "{" in line and not inside_function:
+            function.append(line)
+            parenthesis_stack = parenthesis_stack + 1
+            inside_function = True
+   
+        elif "}" in line:
+            parenthesis_stack = parenthesis_stack - 1; 
+            function.append(line)
+            if parenthesis_stack == 0:
+                unparsed_functions.append(function)
+                function = []
+                inside_function = False
+   
+        elif inside_function:
+            function.append(line)
+   
+    # print(unparsed_functions)
+   
+    function_list = []
+    for unparsed_function in unparsed_functions:
+        function = {
+            "returnType": "",
+            "functionName": "",
+            "parameter": [],
+            "instruction": []
+        }
+   
+        head = read_head(unparsed_function[0])
+        
+        function["returnType"] = head[0]
+        function["functionName"] = head[1]
+   
+        # iterate over pairs parameter keywords
+        i = 2
+        while i+2 <= len(head)-1:
+            global declaration
+            param = {
+                "type": head[i],
+                "dataName": head[i+1],
+                "codeType": "declaration",
+                "address": -(declaration*4)
+            }
+            declaration = declaration + 1
+            function["parameter"].append(param)
+            i = i + 2
+        
+        # ignore the first line
+        function["instruction"] = read_instruction(1, unparsed_function)["statement"]
+        function_list.append(function)
+        declaration = 1
+
+    return function_list
+
+def print_JSON(function_list):
+    # Print the parsed JSON format of all the functions
+    for function in function_list:
+        # print seperator
+        print("__________________________________________________________")
+        result = json.dumps(function, indent=4)
+        print(result)
+
+# Main menu loop
+def menu_loop():
+    global label_count
+    global declaration
+    choice = ""
+    while choice != "0":
+        # reset globals
+        label_count = 0
+        declaration = 1
+        splash_screen()
+        print_choices()
+        choice = input("Choice: ")
+        if choice == "1":
+            choice_1()
+        elif choice == "2":
+            choice_2()
+        elif choice == "3":
+            choice_3()
+  
 
 # Main routine
 def main():
-
-  # Read filename from system arguments
-  source = read_source(sys.argv[1])
-
-  # Seperate source code into functions
-  unparsed_functions = []
-  parenthesis_stack = 0
-  inside_function = False
-  function = []
-  for line in source:
-    # print(line," :\t\t", function, inside_function, ":\t\t", parenthesis_stack)
-    if "{" in line and inside_function:
-      parenthesis_stack = parenthesis_stack + 1;
-      function.append(line)
-      
-    elif "{" in line and not inside_function:
-      function.append(line)
-      parenthesis_stack = parenthesis_stack + 1
-      inside_function = True
-
-    elif "}" in line:
-      parenthesis_stack = parenthesis_stack - 1; 
-      function.append(line)
-      if parenthesis_stack == 0:
-        unparsed_functions.append(function)
-        function = []
-        inside_function = False
-
-    elif inside_function:
-      function.append(line)
-
-  # print(unparsed_functions)
-
-  function_list = []
-  for unparsed_function in unparsed_functions:
-    function = {
-        "returnType": "",
-        "functionName": "",
-        "parameter": [],
-        "instruction": []
-    }
-
-    head = read_head(unparsed_function[0])
-    
-    function["returnType"] = head[0]
-    function["functionName"] = head[1]
-
-    print(head)
-
-    # iterate over pairs parameter keywords
-    i = 2
-    while i+2 <= len(head)-1:
-      global declaration
-      param = {
-        "type": head[i],
-        "dataName": head[i+1],
-        "codeType": "declaration",
-        "address": -(declaration*4)
-      }
-      declaration = declaration + 1
-      function["parameter"].append(param)
-      i = i + 2
-    
-    # ignore the first line
-    function["instruction"] = read_instruction(1, unparsed_function)["statement"]
-    function_list.append(function)
-    declaration = 1
-
-  # Print the parsed JSON format of all the functions
-  for function in function_list:
-    result = json.dumps(function, indent=4)
-    print(result)
-
-  # Translate the parsed functions into assembly
-  translate(function_list)
+    menu_loop()
 
 main()
