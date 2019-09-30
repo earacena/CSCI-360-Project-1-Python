@@ -185,9 +185,26 @@ def translate(functions):
     for function in functions:
         # Print function name
         print(function["functionName"] + ": ")
-
+        
+        # Declaration check
+        num_of_declared = 0
+        for instr in function["instruction"]:
+            #print(instr)
+            if "return" in instr:
+                continue
+            elif instr["codeType"] == "Declaration":
+                num_of_declared = num_of_declared + 1
+     
+        # default prereserved space is 16 bytes
+        if num_of_declared > 4:
+            print("\tpush\trbp")
+            print("\tsub\trsp, " + str((num_of_declared+2)*4))
+        else:
+            print("\tpush\trbp")
+            print("\tmov\trbp, rsp") 
+ 
         # Create scope hash table to keep track of all declared variables/parameters
-        scope ={}
+        scope = {}
     
         # Add parameters to scope
         for parameter in function["parameter"]:
@@ -225,6 +242,8 @@ def translate(functions):
             if instruction["codeType"] == "else":
                 translate_else(instruction, scope) 
 
+
+
 def translate_declaration(instruction, scope):
     # print(instruction)
     
@@ -234,7 +253,7 @@ def translate_declaration(instruction, scope):
     
     # if declaration instantly assigns value, translate immediately
     if instruction["dataValue"] != "":
-        print("\tmov\tDWORD PTR [rbp" + instruction["address"].strip(' ') + "], " + instruction["dataValue"] )
+        print("\tmov\tDWORD PTR [rbp" + str(instruction["address"]) + "], " + instruction["dataValue"] )
 
     return scope
 
@@ -257,17 +276,22 @@ def translate_logic(instruction, scope):
   
     # Print the assembly instruction 
     if operator == "add" or operator == "sub":
-        if instruction["operand2"].strip(' ') in scope:
+        if instruction["operand1"].strip(' ') in scope and instruction["operand2"].strip(' ') in scope:
             # mov eax, mem[operand2]
             # op mem[dest], eax
             print("\tmov\teax, DWORD PTR[rbp"+ str(scope[instruction["operand2"].strip(" ")]) + "]")
             print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], eax" )
-        else:
+        elif instruction["operand1"].strip(' ') in scope and instruction["operand2"].strip(' ') not in scope:
             # op mem[dest], num
             print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand2"].strip(" "))
               
     if operator == "mov":
-        print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand1"] )
+        if instruction["operand1"].strip(" ") in scope: 
+            print("\tmov\teax, DWORD PTR[rbp"+ str(scope[instruction["operand1"].strip(" ")]) + "]")
+            print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], eax" )
+
+        elif instruction["operand1"].strip(" ") not in scope:
+            print("\t" + operator + "\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(' ')]) + "], " + instruction["operand1"] )
               
     if operator == "call":
         translate_call(instruction, scope)          
@@ -303,8 +327,8 @@ def translate_call(instruction, scope):
         num_of_args = num_of_args - 1
          
     # make the call
-    print("\tmov \trdi, eax")
-    print("\tcall " + function_call)
+    print("\tmov\trdi, eax")
+    print("\tcall\t" + function_call)
 
 
 def translate_if(instruction, scope):
@@ -420,9 +444,76 @@ def translate_else(instruction, scope):
 
 
 def translate_for(instruction, scope):
-    print("not processed")
+    global label_count
+    scope = translate_declaration(instruction["initialization"], scope)
+    operator = ""
 
+    if "==" in instruction["termination"]:
+        jump_cmd = "jne"
+        delimiter = "=="
+  
+    if "<=" in instruction["termination"]:
+        jump_cmd = "jg"
+        delimiter = "<="
+  
+    if ">=" in instruction["termination"]:
+        jump_cmd = "jl"
+        delimiter = ">="
+  
+    if "<>" in instruction["termination"]:
+        jump_cmd = "je"
+        delimiter = "<>"
+  
+    if "<" in instruction["termination"]:
+        jump_cmd = "jge"
+        delimiter = "<"
+  
+    if ">" in instruction["termination"]:
+        jump_cmd = "jle"
+        delimiter = ">"
 
+    print(".L" + str(label_count+1) + ":")
+    arguments = instruction["termination"].split(delimiter)
+    
+    if arguments[0] in scope and arguments[1] in scope:
+        print("\tmov\teax, DWORD PTR[rbp" + str(scope[arguments[0]]) + "]")
+        print("\tcmp\teax, DWORD PTR[rbp" + str(scope[arguments[1]]) + "]")
+    elif arguments[0] in scope and arguments[1] not in scope:
+        print("\tcmp\tDWORD PTR[rbp" + str(scope[arguments[0]]) + "], " + str(arguments[1]))
+    
+    # print jump command
+    print("\t" + jump_cmd + "\t.L" + str(label_count) )
+
+    for statement in instruction["statement"]:
+        if "return" in statement:
+            value = statement.split(" ")[1].strip(";")
+            if value in scope:
+                print("\tmov\teax, DWORD PTR[rbp" + str(scope[value]) + "]")
+            else:
+                print("\tmov\teax, " + str(value))
+                print("\tpop rbp")
+                print("\tret")
+            break
+    
+    
+        if statement["codeType"] == "declaration":
+            scope = translate_declaration(statement, scope)
+    
+        if statement["codeType"] == "logicOperation":
+            translate_logic(statement, scope) 
+              
+        if statement["codeType"] == "for":
+            translate_for(statement, scope)
+            
+        if statement["codeType"] == "if":
+            translate_if(statement, scope)
+
+        if statement["codeType"] == "else":
+            translate_else(statement, scope)
+    
+    print("\tjmp\t.L" + str(label_count+1))
+    print(".L" + str(label_count) + ":")
+    label_count = label_count + 2
 
 # Main routine
 def main():
@@ -495,9 +586,9 @@ def main():
     declaration = 1
 
   # Print the parsed JSON format of all the functions
-  #for function in function_list:
-    #result = json.dumps(function, indent=4)
-    #print(result)
+  for function in function_list:
+    result = json.dumps(function, indent=4)
+    print(result)
 
   # Translate the parsed functions into assembly
   translate(function_list)
