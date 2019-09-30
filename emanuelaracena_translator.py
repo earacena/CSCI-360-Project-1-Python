@@ -330,6 +330,9 @@ def translate_call(instruction, scope):
     print("\tmov\trdi, eax")
     print("\tcall\t" + function_call)
 
+    # move result to specified place
+    print("\tmov\tDWORD PTR[rbp" + str(scope[instruction["destination"].strip(" ")]) + "], eax")
+
 
 def translate_if(instruction, scope):
     global label_count
@@ -514,6 +517,8 @@ def translate_for(instruction, scope):
     print("\tjmp\t.L" + str(label_count+1))
     print(".L" + str(label_count) + ":")
     label_count = label_count + 2
+
+    
 
 # Main routine
 def main():
