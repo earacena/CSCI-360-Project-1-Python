@@ -646,7 +646,7 @@ def menu_loop():
     global label_count
     global declaration
     choice = ""
-    while choice != "0":
+    while str(choice).strip("\n") != "0":
         # reset globals
         label_count = 0
         declaration = 1
