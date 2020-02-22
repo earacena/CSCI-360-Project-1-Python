@@ -1,5 +1,5 @@
 # CSCI 360 - Project 1
-# Author: Emanuel Aracena
+# Author: Emanuel Aracena Beriguete
 # Created on September 28, 2019
 
 ##
